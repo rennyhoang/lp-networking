@@ -120,29 +120,11 @@ The dashboard auto-refreshes every 10 seconds and provides:
 
 ## Lessons Learned
 
-**1. Logic programming forces you to think in terms of what is true, not what to do.**
-Each detection rule reads almost like a policy document: *"a port scan exists when one source contacts many distinct ports on the same destination within a window."* This made the rules easy to review and reason about, which is exactly what you want for security logic.
+**1. `current_output` in an HTTP handler is the CGI response stream.**
+SWI-Prolog's `library(http/thread_httpd)` binds `current_output` to the raw HTTP socket stream for the duration of each request handler. Any predicate that writes to `current_output` — including deeply nested ones like the `format("[+] Loaded ...")` calls inside the log loaders — will inject bytes into the HTTP body before `reply_json_dict/1` sets the `Content-Type` header, causing a 500 "CGI stream was discarded" error. The fix is to wrap the call in `with_output_to(user_error, Goal)`, passing the stream alias directly. `with_output_to(stream(user_error), Goal)` looks plausible but is a type error — `stream/1` is not a valid target specifier; the alias must be bare.
 
-**2. Variables must be ground before procedural predicates see them.**
-The lateral movement rule initially failed silently because `is_internal(Src)` was called before any fact had bound `Src`. Prolog's `atom(IP)` guard returned false for an unbound variable and the clause just failed — no error, no warning. The fix was to put a `connection(_, Src, _, _, _, _)` fact first to generate candidate values. This is a fundamental Prolog pattern: *generate, then test*. Getting the order wrong costs nothing at compile time but breaks everything at runtime.
+**2. `process_create/3` with a pipe requires a specific teardown order to avoid deadlock and zombies.**
+When calling tshark via `process_create(path(tshark), Args, [stdout(pipe(Out)), process(PID)])`, the teardown sequence is: read the stream fully → `close(Out)` → `process_wait(PID, _)`. Skipping `process_wait` leaves tshark as a zombie because SWI-Prolog does not auto-reap processes created with the `process(PID)` option. More subtly, calling `process_wait` *before* closing the pipe can deadlock: if tshark's output fills the OS pipe buffer, tshark blocks on write, your reader blocks on `process_wait`, and neither side makes progress. The pipe must be drained and closed first.
 
-**3. Backtracking is power and a performance trap at the same time.**
-The sliding-window rules fire once per anchor event, meaning a scan with 12 connection records triggers the port scan rule 12 times. `unique_threats/1` collapses these with `list_to_set` before reporting. For small log files this is fine; for production-scale logs you would precompute aggregations into indexed facts rather than letting Prolog re-scan on each anchor.
-
-**4. `aggregate_all` is the right tool for counting and set collection.**
-Using `findall` + `length` for counting works but produces duplicate solutions for set-like questions. `aggregate_all(set(X), Goal, S)` gives a sorted, deduplicated list in one step and made the port scan and lateral movement rules much cleaner.
-
-**5. String handling in Prolog is workable but not its strong suit.**
-Parsing real syslog lines with `split_string`, `sub_string`, and `number_string` required careful attention to SWI-Prolog's atom/string distinction (atoms vs. string objects are different types). DCG grammars would be more principled for complex formats, but `split_string` was fast enough for the two formats needed here.
-
-**6. Declarative extensibility is the real win.**
-The fact that you can add a new threat rule — say, correlating a failed login with a connection attempt from the same IP within 60 seconds — as a single `threat/3` clause, with zero changes to the reporting or deduplication code, demonstrates why logic programming is a strong fit for rule-based detection systems. The knowledge base (facts) and the inference engine (rules) are completely separate.
-
-**7. PCAP's `orig_len` field enables large-transfer simulation without large files.**
-A PCAP record stores two lengths: `incl_len` (bytes actually on disk) and `orig_len` (wire size). tshark surfaces `orig_len` as `frame.len`. By writing a minimal 60-byte frame with `orig_len = 15_728_640`, the exfil detector sees a 15 MB transfer without bloating the test file. This is the same mechanism packet capture tools use when truncating oversized frames.
-
-**8. SWI-Prolog's HTTP handler context hijacks `current_output`.**
-In an HTTP request handler, `current_output` is the CGI response stream. Any `format/1` call inside a loader predicate writes directly into the HTTP body before headers are set — causing a 500 error. The fix is `with_output_to(user_error, Goal)`, which redirects console output to stderr and leaves the response stream clean for `reply_json_dict/1`.
-
-**9. Child processes need explicit cleanup to avoid zombies.**
-`process_create/3` with the `process(PID)` option defers waiting so you can read the output pipe first. Without a matching `process_wait(PID, _)` after closing the pipe, the tshark process lingers as a zombie. The pattern is: open pipe → read stream → close pipe → wait for PID.
+**3. PCAP's `orig_len` field lets you simulate large transfers without large files.**
+Each PCAP packet record contains two length fields: `incl_len` (bytes stored on disk) and `orig_len` (original wire size). tshark exposes `orig_len` as `frame.len`. Because individual Ethernet frames are capped at 65535 bytes, detecting a 15 MB exfil event from a PCAP would normally require session-level reassembly across hundreds of frames. Instead, writing a single minimal frame (just headers, ~60 bytes) with `orig_len = 15_728_640` makes tshark report a 15 MB transfer, which is exactly what the exfil detection rule sees. This is the same mechanism packet capture tools use when recording truncated frames — the distinction between what was captured and what was on the wire is built into the format.
