@@ -1,4 +1,3 @@
-# OpenSSH syslog format — loaded by load_auth_log/1 exactly like the CSV file
 May  9 03:05:01 gateway sshd[1101]: Failed password for root from 203.0.113.5 port 41022 ssh2
 May  9 03:05:11 gateway sshd[1102]: Failed password for root from 203.0.113.5 port 41023 ssh2
 May  9 03:05:21 gateway sshd[1103]: Failed password for root from 203.0.113.5 port 41024 ssh2
