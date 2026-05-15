@@ -30,31 +30,25 @@
 :- use_module(library(lists)).
 :- use_module(library(process)).
 
-%% ===========================================================
-%%  Thresholds — tune these to control sensitivity
-%% ===========================================================
-
+% Thresholds
 threshold(port_scan_count,    10).   % distinct ports to same dst in window
 threshold(port_scan_window,   60).   % seconds
 threshold(brute_force_count,  5).    % failed logins from same src in window
 threshold(brute_force_window, 300).  % seconds (5 minutes)
-threshold(exfil_bytes,    10000000). % 10 MB — single-connection threshold
+threshold(exfil_bytes,    10000000). % 10 MB (single-connection threshold)
 threshold(lateral_hosts,      5).    % unique internal dsts from one src
 
-%% ===========================================================
-%%  Dynamic fact store
-%% ===========================================================
-
+% Dynamic fact store
 :- dynamic connection/6.
-%% connection(+UnixTs, +SrcIP, +DstIP, +DstPort, +BytesOut, +Protocol)
+% connection(+UnixTs, +SrcIP, +DstIP, +DstPort, +BytesOut, +Protocol)
 
 :- dynamic login_attempt/4.
-%% login_attempt(+UnixTs, +SrcIP, +Username, +Result)
-%% Result ∈ { failed, success, invalid_user }
+% login_attempt(+UnixTs, +SrcIP, +Username, +Result)
+% Result is { failed, success, invalid_user }
 
 :- dynamic blacklisted_ip/1.
 
-%% Seed blacklist (known Tor exits / attack sources — for demonstration)
+% Seed blacklist (known Tor exits / attack sources)
 :- maplist([IP]>>(assertz(blacklisted_ip(IP))), [
     '185.220.101.1',
     '185.220.101.2',
@@ -71,17 +65,8 @@ clear_data :-
     retractall(connection(_, _, _, _, _, _)),
     retractall(login_attempt(_, _, _, _)).
 
-%% ===========================================================
-%%  PCAP loader  (requires tshark from wireshark-cli)
-%%
-%%  Usage:  ?- load_pcap('capture.pcap').
-%%
-%%  Install tshark:
-%%    sudo pacman -S wireshark-cli       # Arch / CachyOS
-%%    sudo apt  install tshark           # Debian / Ubuntu
-%%    brew install wireshark             # macOS
-%% ===========================================================
-
+%  PCAP loader (requires tshark from wireshark-cli)
+%  Usage:  ?- load_pcap('capture.pcap').
 load_pcap(File) :-
     catch(
         load_pcap_(File),
@@ -133,7 +118,7 @@ parse_pcap_line(Line) :-
     nth1(4, Parts, TcpS),
     nth1(5, Parts, UdpS),
     nth1(6, Parts, LenS),
-    SrcS \= "", DstS \= "",          % skip non-IP frames (ARP, STP, etc.)
+    SrcS \= "", DstS \= "",
     number_string(TsF, TsS),
     Ts is truncate(TsF),
     atom_string(Src, SrcS),
@@ -145,11 +130,8 @@ parse_pcap_line(Line) :-
     ( LenS \= "", number_string(Bytes, LenS) -> true ; Bytes = 0 ),
     assertz(connection(Ts, Src, Dst, Port, Bytes, Proto)).
 
-%% ===========================================================
-%%  Address classification
-%% ===========================================================
-
-%% RFC-1918 private ranges
+% Address classification
+% RFC-1918 private ranges
 is_internal(IP) :-
     atom(IP),
     atom_string(IP, S),
@@ -165,22 +147,17 @@ is_172_private(S) :-
     number_string(Oct, OStr),
     Oct >= 16, Oct =< 31.
 
-%% Off-hours: 00:00–07:59 or 18:00–23:59 UTC
+% Off-hours: 00:00–07:59 or 18:00–23:59 UTC
 is_off_hours(Ts) :-
     number(Ts),
     Hour is (round(Ts) mod 86400) // 3600,
     ( Hour < 8 ; Hour >= 18 ), !.
 
-%% ===========================================================
-%%  Connection log loader
-%%
-%%  Format (one record per line; lines starting with # are comments):
-%%    unix_timestamp,src_ip,dst_ip,dst_port,bytes_out,protocol[,verdict]
-%%
-%%  Example:
-%%    1715248800,192.168.1.100,10.0.0.5,22,1024,tcp,blocked
-%% ===========================================================
-
+% Connection log loader
+% Format (one record per line; lines starting with # are comments):
+%   unix_timestamp,src_ip,dst_ip,dst_port,bytes_out,protocol[,verdict]
+% Example:
+%   1715248800,192.168.1.100,10.0.0.5,22,1024,tcp,blocked
 load_connection_log(File) :-
     retractall(connection(_, _, _, _, _, _)),
     setup_call_cleanup(
@@ -214,22 +191,16 @@ parse_conn_csv(Line) :-
     atom_string(Proto, ProtoS),
     assertz(connection(Ts, Src, Dst, Port, Bytes, Proto)).
 
-%% ===========================================================
-%%  Auth log loader
-%%
-%%  Accepts two formats automatically:
-%%
-%%  CSV:
-%%    unix_timestamp,src_ip,username,result
-%%    result ∈ { failed, success, invalid_user }
-%%    Example: 1715248800,203.0.113.5,root,failed
-%%
-%%  OpenSSH syslog:
-%%    Mon DD HH:MM:SS host sshd[N]: Failed password for root from 1.2.3.4 port 22 ssh2
-%%    Mon DD HH:MM:SS host sshd[N]: Accepted password for alice from 1.2.3.4 port 22 ssh2
-%%    Mon DD HH:MM:SS host sshd[N]: Invalid user guest from 1.2.3.4 port 22
-%% ===========================================================
-
+% Auth log loader
+%  Accepts two formats automatically:
+%  CSV:
+%    unix_timestamp,src_ip,username,result
+%    result ∈ { failed, success, invalid_user }
+%    Example: 1715248800,203.0.113.5,root,failed
+%  OpenSSH syslog:
+%    Mon DD HH:MM:SS host sshd[N]: Failed password for root from 1.2.3.4 port 22 ssh2
+%    Mon DD HH:MM:SS host sshd[N]: Accepted password for alice from 1.2.3.4 port 22 ssh2
+%    Mon DD HH:MM:SS host sshd[N]: Invalid user guest from 1.2.3.4 port 22
 load_auth_log(File) :-
     retractall(login_attempt(_, _, _, _)),
     setup_call_cleanup(
@@ -247,7 +218,7 @@ read_auth_stream(In, Acc, Total) :-
       ( blank_or_comment(Line)  -> Acc1 = Acc
       ; parse_auth_csv(Line)    -> Acc1 is Acc + 1
       ; parse_syslog_ssh(Line)  -> Acc1 is Acc + 1
-      ; Acc1 = Acc   % non-SSH syslog lines silently skipped
+      ; Acc1 = Acc
       ),
       read_auth_stream(In, Acc1, Total)
     ).
@@ -261,14 +232,13 @@ parse_auth_csv(Line) :-
     member(Result, [failed, success, invalid_user]),
     assertz(login_attempt(Ts, Src, User, Result)).
 
-%% Syslog SSH parser
+%% syslog SSH parser
 parse_syslog_ssh(Line) :-
     nonempty_tokens(Line, [MonS, DayS, TimeS | _]),
     atom_string(MonA, MonS),
     month_num(MonA, MonN),
     number_string(DayN, DayS),
     time_secs(TimeS, TimeSec),
-    %% Approximate timestamp — relative ordering correct, year ignored
     Ts is MonN * 2592000 + DayN * 86400 + TimeSec,
     syslog_ssh_event(Line, User, Src, Result),
     assertz(login_attempt(Ts, Src, User, Result)).
@@ -317,21 +287,19 @@ nonempty_tokens(Str, Toks) :-
 blank_or_comment("").
 blank_or_comment(L) :- sub_string(L, 0, 1, _, "#").
 
-%% ===========================================================
-%%  Detection Rules
-%%
-%%  threat(+Type, +Key, -Evidence)
-%%    Type     — atom identifying the attack class
-%%    Key      — term identifying the actor/victim (used for deduplication)
-%%    Evidence — structured term explaining why the rule fired
-%%
-%%  Adding a new detection rule is as simple as adding a new
-%%  threat/3 clause — the reporting and deduplication are automatic.
-%% ===========================================================
+% Detection Rules
+%
+%  threat(+Type, +Key, -Evidence)
+%    Type     — atom identifying the attack class
+%    Key      — term identifying the actor/victim (used for deduplication)
+%    Evidence — structured term explaining why the rule fired
+%
+%  Adding a new detection rule is as simple as adding a new
+%  threat/3 clause — the reporting and deduplication are automatic.
 
-%% ── Port Scan ───────────────────────────────────────────────
-%% One source touches >= threshold distinct ports on the same
-%% destination within a sliding time window.
+% Port Scan
+% One source touches >= threshold distinct ports on the same
+% destination within a sliding time window.
 threat(port_scan, src(Src)-dst(Dst), ports_in_window(Count, Ports)) :-
     threshold(port_scan_count,  MinPorts),
     threshold(port_scan_window, Window),
@@ -343,9 +311,9 @@ threat(port_scan, src(Src)-dst(Dst), ports_in_window(Count, Ports)) :-
     length(Ports, Count),
     Count >= MinPorts.
 
-%% ── Brute Force ─────────────────────────────────────────────
-%% Repeated failed auth attempts against the same account from
-%% the same source within a time window.
+% Brute Force
+% Repeated failed auth attempts against the same account from
+% the same source within a time window.
 threat(brute_force, src(Src)-user(User), attempts(Count)) :-
     threshold(brute_force_count,  Min),
     threshold(brute_force_window, Window),
@@ -356,9 +324,9 @@ threat(brute_force, src(Src)-user(User), attempts(Count)) :-
         Count),
     Count >= Min.
 
-%% ── Data Exfiltration ───────────────────────────────────────
-%% An internal host sends an abnormally large volume of data to
-%% an external host in a single connection.
+% Data Exfiltration
+% An internal host sends an abnormally large volume of data to
+% an external host in a single connection.
 threat(data_exfiltration, src(Src)-dst(Dst),
        evidence(bytes(Bytes), port(Port), off_hours(OffHours))) :-
     threshold(exfil_bytes, MinBytes),
@@ -368,12 +336,11 @@ threat(data_exfiltration, src(Src)-dst(Dst),
     Bytes >= MinBytes,
     ( is_off_hours(Ts) -> OffHours = yes ; OffHours = no ).
 
-%% ── Lateral Movement ────────────────────────────────────────
-%% An internal host connects to many distinct internal peers —
-%% consistent with worm spread or post-compromise reconnaissance.
+% Lateral Movement
+% An internal host connects to many distinct internal peers
 threat(lateral_movement, src(Src), contacted_hosts(Count, Targets)) :-
     threshold(lateral_hosts, Min),
-    connection(_, Src, _, _, _, _),   % generate candidate source IPs
+    connection(_, Src, _, _, _, _),
     is_internal(Src),
     aggregate_all(set(Dst),
         ( connection(_, Src, Dst, _, _, _),
@@ -382,8 +349,8 @@ threat(lateral_movement, src(Src), contacted_hosts(Count, Targets)) :-
     length(Targets, Count),
     Count >= Min.
 
-%% ── Blacklisted IP ──────────────────────────────────────────
-%% Any traffic to or from a known malicious IP address.
+% Blacklisted IP
+% Any traffic to or from a known malicious IP address.
 threat(blacklist_hit, ip(BadIP), traffic(Dir)) :-
     blacklisted_ip(BadIP),
     ( connection(_, BadIP, Dst, Port, _, _),
@@ -392,13 +359,10 @@ threat(blacklist_hit, ip(BadIP), traffic(Dir)) :-
         Dir = outbound(from(Src), to(BadIP), port(Port))
     ).
 
-%% ===========================================================
-%%  Deduplication
-%%  threat/3 can match the same (Type, Key) multiple times when
-%%  the sliding window anchors on different events.  Collapse each
-%%  unique pair to one alert.
-%% ===========================================================
-
+% Deduplication
+% threat/3 can match the same (Type, Key) multiple times when
+% the sliding window anchors on different events. Collapse each
+% unique pair to one alert.
 unique_threats(Threats) :-
     findall(Type-Key, threat(Type, Key, _), Raw),
     list_to_set(Raw, Pairs),
@@ -406,10 +370,7 @@ unique_threats(Threats) :-
                 once(threat(Type, Key, Ev))
             ), Pairs, Threats).
 
-%% ===========================================================
-%%  Report
-%% ===========================================================
-
+%  Report
 analyze :-
     format("~n+==========================================+~n"),
     format("|   Network Threat Detection Report       |~n"),
@@ -446,11 +407,8 @@ print_threat(threat(Type, Key, Evidence)) :-
     format("     Target   : ~q~n", [Key]),
     format("     Evidence : ~q~n~n", [Evidence]).
 
-%% ===========================================================
-%%  Command-line entry point
-%%  $ swipl -g main network_monitor.pl -- connections.log auth.log
-%% ===========================================================
-
+% CLI entry point
+% $ swipl -g main network_monitor.pl -- connections.log auth.log
 main :-
     current_prolog_flag(argv, [ConnLog, AuthLog | _]),
     !,

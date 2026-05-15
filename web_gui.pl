@@ -1,13 +1,8 @@
-%%  web_gui.pl  —  HTTP dashboard for network_monitor
-%%
-%%  Load alongside network_monitor.pl:
-%%    $ swipl -l network_monitor.pl -l web_gui.pl
-%%    ?- start_server.        %% → http://localhost:8080
-%%    ?- start_server(9090).  %% custom port
-%%
-%%  Or load both at once:
-%%    $ swipl -g "use_module(network_monitor), use_module(web_gui), start_server, halt(0)." \
-%%            network_monitor.pl web_gui.pl
+%  web_gui.pl  —  HTTP dashboard for network_monitor
+%
+%  $ swipl -l network_monitor.pl -l web_gui.pl
+%  ?- start_server.        %% → http://localhost:8080
+%  ?- start_server(9090).  %% custom port
 
 :- module(web_gui, [start_server/0, start_server/1]).
 
@@ -21,53 +16,40 @@
 :- use_module(library(pairs)).
 :- use_module(network_monitor).
 
-%% Compute the absolute path to static/ at load time so the server works
-%% regardless of the working directory swipl is launched from.
+% server shouldn't depend on working directory
 :- dynamic static_dir/1.
 :- prolog_load_context(directory, D),
    atomic_list_concat([D, '/static'], S),
    assertz(static_dir(S)).
 
-%% ===========================================================
-%%  Routes
-%% ===========================================================
 
-%% Static files — serve everything from static/ including index.html
+% Routes
+% Static files
 :- http_handler('/', serve_static, [prefix]).
 
-%% Read-only API
+% Read-only API
 :- http_handler('/api/summary', api_summary, [method(get)]).
 :- http_handler('/api/threats', api_threats, [method(get)]).
 :- http_handler('/api/data',    api_data,    [method(get)]).
 
-%% Load endpoints — POST { "file": "/path/to/file" }
+% Load endpoints
 :- http_handler('/api/load/connections', api_load_connections, [method(post)]).
 :- http_handler('/api/load/auth',        api_load_auth,        [method(post)]).
 :- http_handler('/api/load/pcap',        api_load_pcap,        [method(post)]).
 
-%% ===========================================================
-%%  Server startup
-%% ===========================================================
-
+% Server startup
 start_server :- start_server(8080).
-
 start_server(Port) :-
     http_server(http_dispatch, [port(Port), workers(4)]),
     format("~n[+] Dashboard → http://localhost:~w/~n", [Port]),
     format("    Load data from the REPL or the browser's Load panel.~n~n").
 
-%% ===========================================================
 %%  Static file handler
-%% ===========================================================
-
 serve_static(Request) :-
     static_dir(Dir),
     http_reply_from_files(Dir, [indexes(['index.html'])], Request).
 
-%% ===========================================================
-%%  GET /api/summary
-%% ===========================================================
-
+% GET /api/summary
 api_summary(_Request) :-
     aggregate_all(count, network_monitor:connection(_,_,_,_,_,_), Conn),
     aggregate_all(count, network_monitor:login_attempt(_,_,_,_),  Auth),
@@ -81,10 +63,7 @@ api_summary(_Request) :-
         threat_count:    TN
     }).
 
-%% ===========================================================
-%%  GET /api/threats
-%% ===========================================================
-
+% GET /api/threats
 api_threats(_Request) :-
     unique_threats(Threats),
     maplist(threat_to_dict, Threats, Dicts),
@@ -103,11 +82,7 @@ sev_string(data_exfiltration,"CRITICAL").
 sev_string(lateral_movement, "HIGH").
 sev_string(blacklist_hit,    "CRITICAL").
 
-%% ===========================================================
-%%  GET /api/data
-%%  Returns pre-aggregated data for all four charts.
-%% ===========================================================
-
+% GET /api/data
 api_data(_Request) :-
     connections_by_hour(TimeLabels, TimeCounts),
     proto_distribution(ProtoLabels, ProtoCounts),
@@ -122,7 +97,7 @@ api_data(_Request) :-
                                   success: SuccessCounts}
     }).
 
-%% Connection count bucketed by hour
+% Connection count bucketed by hour
 connections_by_hour(Labels, Counts) :-
     findall(H,
         ( network_monitor:connection(Ts,_,_,_,_,_),
@@ -143,7 +118,7 @@ connections_by_hour(Labels, Counts) :-
         ), HRange, Counts)
     ).
 
-%% Distinct protocol counts
+% Distinct protocol counts
 proto_distribution(Labels, Counts) :-
     aggregate_all(set(P), network_monitor:connection(_,_,_,_,_,P), Protos),
     ( Protos = [] ->
@@ -155,7 +130,7 @@ proto_distribution(Labels, Counts) :-
         maplist(atom_string, Protos, Labels)
     ).
 
-%% Top 10 source IPs by connection count
+% Top 10 source IPs by connection count
 top_sources(Labels, Counts) :-
     aggregate_all(set(S), network_monitor:connection(_,S,_,_,_,_), Srcs),
     ( Srcs = [] ->
@@ -171,7 +146,7 @@ top_sources(Labels, Counts) :-
         maplist(atom_string, SrcAtoms, Labels)
     ).
 
-%% Auth event counts bucketed by hour, split by result
+% Auth event counts bucketed by hour, split by result
 auth_by_hour(Labels, Failed, Success) :-
     findall(H,
         ( network_monitor:login_attempt(Ts,_,_,_),
@@ -196,11 +171,7 @@ auth_by_hour(Labels, Failed, Success) :-
         ), HRange, Success)
     ).
 
-%% ===========================================================
-%%  POST /api/load/*
-%%  Body: { "file": "/absolute/or/relative/path" }
-%% ===========================================================
-
+% POST /api/load/*
 api_load_connections(Request) :- handle_load(Request, load_connection_log).
 api_load_auth(Request)        :- handle_load(Request, load_auth_log).
 api_load_pcap(Request)        :- handle_load(Request, load_pcap).

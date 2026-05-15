@@ -29,7 +29,6 @@
       line-height: 1.5;
     }
 
-    /* ── Header ─────────────────────────────────────────── */
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
@@ -44,7 +43,6 @@
     h1 { font-size: 0.95rem; color: var(--accent); letter-spacing: 0.06em; }
     #last-update { font-size: 0.75rem; color: var(--muted); font-family: monospace; }
 
-    /* ── Layout ─────────────────────────────────────────── */
     main {
       padding: 1.25rem;
       max-width: 1600px;
@@ -54,7 +52,6 @@
       gap: 1rem;
     }
 
-    /* ── Load panel ─────────────────────────────────────── */
     .load-panel {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -114,7 +111,6 @@
     #load-status.ok  { color: var(--ok); }
     #load-status.err { color: var(--danger); }
 
-    /* ── Summary cards ───────────────────────────────────── */
     .cards {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -143,7 +139,6 @@
       margin-top: 0.3rem;
     }
 
-    /* ── Charts grid ─────────────────────────────────────── */
     .charts {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -165,7 +160,6 @@
     }
     .chart-wrap { position: relative; height: 210px; }
 
-    /* ── Threat list ─────────────────────────────────────── */
     .threats {
       background: var(--card);
       border: 1px solid var(--border);
@@ -213,7 +207,6 @@
     }
     .no-threats { color: var(--ok); font-size: 0.88rem; }
 
-    /* ── Responsive ─────────────────────────────────────── */
     @media (max-width: 900px) {
       .cards  { grid-template-columns: 1fr 1fr; }
       .charts { grid-template-columns: 1fr; }
@@ -229,8 +222,6 @@
 </header>
 
 <main>
-
-  <!-- Load panel -->
   <section class="load-panel">
     <div class="load-row">
       <div class="load-field">
@@ -252,7 +243,6 @@
     </div>
   </section>
 
-  <!-- Summary cards -->
   <section class="cards">
     <div class="card">
       <div class="card-val" id="stat-conns">—</div>
@@ -272,7 +262,6 @@
     </div>
   </section>
 
-  <!-- Charts -->
   <section class="charts">
     <div class="chart-box span2">
       <div class="chart-title">Connection Timeline</div>
@@ -292,7 +281,6 @@
     </div>
   </section>
 
-  <!-- Threat list -->
   <section class="threats">
     <div class="section-title">Active Threats</div>
     <div id="threat-list"><p class="no-threats">Loading…</p></div>
@@ -301,7 +289,6 @@
 </main>
 
 <script>
-// ── Chart instances ───────────────────────────────────────
 let chartTimeline, chartProto, chartSources, chartAuth;
 
 const C = {
@@ -406,15 +393,11 @@ function initCharts() {
   });
 }
 
-// ── Chart update helper ───────────────────────────────────
-
 function setChart(chart, labels, ...dataSets) {
   chart.data.labels = labels;
   dataSets.forEach((data, i) => { chart.data.datasets[i].data = data; });
   chart.update('none');   // 'none' skips animation on auto-refresh
 }
-
-// ── Summary cards ─────────────────────────────────────────
 
 function updateSummary(s) {
   document.getElementById('stat-conns').textContent   = s.connections;
@@ -424,8 +407,6 @@ function updateSummary(s) {
   document.getElementById('card-threats')
     .classList.toggle('alert', s.threat_count > 0);
 }
-
-// ── Threat list ───────────────────────────────────────────
 
 function renderThreats(threats) {
   const el = document.getElementById('threat-list');
@@ -446,8 +427,6 @@ function renderThreats(threats) {
       </div>`;
   }).join('');
 }
-
-// ── Load panel ────────────────────────────────────────────
 
 async function loadFile(type) {
   const ids = { connections: 'input-conn', auth: 'input-auth', pcap: 'input-pcap' };
@@ -478,8 +457,6 @@ async function loadFile(type) {
     statusEl.textContent = `✗ ${e.message}`;
   }
 }
-
-// ── Main refresh loop ─────────────────────────────────────
 
 async function refresh() {
   try {
@@ -518,14 +495,10 @@ async function refresh() {
   }
 }
 
-// ── Utilities ─────────────────────────────────────────────
-
 function esc(s) {
   return String(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-
-// ── Boot ──────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
   initCharts();
