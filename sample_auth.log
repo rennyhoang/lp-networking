@@ -1,0 +1,26 @@
+# Auth Event Log
+# Format: unix_ts,src_ip,username,result
+# result must be one of: failed, success, invalid_user
+#
+# Normal successful logins
+1715248900,192.168.1.10,alice,success
+1715248910,192.168.1.20,bob,success
+1715248920,10.0.0.5,carol,success
+#
+# --- BRUTE FORCE ---
+# 203.0.113.5 hammers root — 6 failures in 50 seconds (threshold: 5 in 300s)
+1715249000,203.0.113.5,root,failed
+1715249010,203.0.113.5,root,failed
+1715249020,203.0.113.5,root,failed
+1715249030,203.0.113.5,root,failed
+1715249040,203.0.113.5,root,failed
+1715249050,203.0.113.5,root,failed
+#
+# Single failures — not brute force on their own
+1715249100,192.168.1.99,admin,failed
+1715249110,10.0.0.100,ubuntu,failed
+#
+# Invalid user probes (common scanner / credential stuffing pattern)
+1715249200,198.51.100.5,pi,invalid_user
+1715249210,198.51.100.5,admin,invalid_user
+1715249220,198.51.100.5,test,invalid_user

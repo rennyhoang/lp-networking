@@ -1,0 +1,10 @@
+# OpenSSH syslog format — loaded by load_auth_log/1 exactly like the CSV file
+May  9 03:05:01 gateway sshd[1101]: Failed password for root from 203.0.113.5 port 41022 ssh2
+May  9 03:05:11 gateway sshd[1102]: Failed password for root from 203.0.113.5 port 41023 ssh2
+May  9 03:05:21 gateway sshd[1103]: Failed password for root from 203.0.113.5 port 41024 ssh2
+May  9 03:05:31 gateway sshd[1104]: Failed password for root from 203.0.113.5 port 41025 ssh2
+May  9 03:05:41 gateway sshd[1105]: Failed password for root from 203.0.113.5 port 41026 ssh2
+May  9 03:05:51 gateway sshd[1106]: Failed password for root from 203.0.113.5 port 41027 ssh2
+May  9 10:01:00 gateway sshd[1200]: Accepted password for alice from 192.168.1.10 port 52100 ssh2
+May  9 10:02:05 gateway sshd[1201]: Invalid user guest from 198.51.100.5 port 39000
+May  9 10:02:15 gateway sshd[1202]: Failed password for invalid user deploy from 198.51.100.5 port 39001 ssh2
